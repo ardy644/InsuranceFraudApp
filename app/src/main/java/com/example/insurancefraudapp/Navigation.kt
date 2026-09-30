@@ -59,7 +59,11 @@ fun InsuranceFraudNavHost(
         }
 
         composable(Screen.ClaimsList.route) {
-            ClaimsListScreen()
+            ClaimsListScreen(
+                onClaimClick = { claimId ->
+                    navController.navigate(Screen.ClaimDetails.createRoute(claimId))
+                }
+            )
         }
 
         composable(Screen.CustomersList.route) {

@@ -46,7 +46,14 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import com.example.insurancefraudapp.network.DashboardStats
+import com.example.insurancefraudapp.network.VigilanceApiClient
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -84,6 +91,35 @@ fun DashboardScreen(
     onSettingsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var suspiciousClaims by remember {
+        mutableStateOf(mockClaims.filter { it.fraudRiskScore >= 40 }.sortedByDescending { it.fraudRiskScore })
+    }
+    var stats by remember {
+        mutableStateOf(
+            DashboardStats(
+                totalCustomers = 8,
+                activePolicies = 8,
+                totalClaims = 10,
+                underInvestigationCases = 3,
+                underReviewToday = 3,
+                highRiskCount = 4,
+                highRiskPercent = 40f,
+                mediumRiskCount = 2,
+                mediumRiskPercent = 20f,
+                lowRiskCount = 4,
+                lowRiskPercent = 40f
+            )
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        val remoteClaims = VigilanceApiClient.fetchClaims(suspiciousOnly = true)
+        if (remoteClaims.isNotEmpty()) {
+            suspiciousClaims = remoteClaims
+        }
+        stats = VigilanceApiClient.fetchDashboardStats()
+    }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -101,24 +137,22 @@ fun DashboardScreen(
         item { GreetingSection() }
 
         // 2x2 Stat Grid
-        item { OperationalSummaryGrid() }
+        item { OperationalSummaryGrid(stats) }
 
         // Quick Action Chips
         item { QuickActionRow() }
 
         // Risk Distribution Card
-        item { RiskDistributionCard() }
+        item { RiskDistributionCard(stats) }
 
         // Claims & Anomaly Trend
         item { ClaimsTrendCard() }
 
         // Suspicious Claims Header
-        item { SuspiciousClaimsHeader() }
+        item { SuspiciousClaimsHeader(suspiciousClaims.size) }
 
-        // Claim cards from mock data (only high/medium risk)
-        val suspiciousClaims = mockClaims.filter { it.fraudRiskScore >= 40 }
-            .sortedByDescending { it.fraudRiskScore }
-        items(suspiciousClaims) { claim ->
+        // Claim cards from backend/fallback data (only high/medium risk)
+        items(suspiciousClaims, key = { it.id }) { claim ->
             SuspiciousClaimCard(
                 claim = claim,
                 onClick = { onClaimClick(claim.id) }
@@ -278,11 +312,7 @@ private fun GreetingSection() {
 // ─── 2×2 Stat Grid ──────────────────────────────────────────────────────────
 
 @Composable
-private fun OperationalSummaryGrid() {
-    val totalClaims = mockClaims.size
-    val flaggedClaims = mockClaims.count { it.fraudRiskScore >= 70 }
-    val approvedClaims = mockClaims.count { it.status == "Approved" }
-
+private fun OperationalSummaryGrid(stats: DashboardStats) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -292,7 +322,7 @@ private fun OperationalSummaryGrid() {
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Group,
                 iconTint = Secondary,
-                value = "$totalClaims",
+                value = "${stats.totalCustomers}",
                 label = "Total Customers",
                 badge = "+3.2%",
                 badgeColor = Color(0xFF99F89E).copy(alpha = 0.6f),
@@ -302,7 +332,7 @@ private fun OperationalSummaryGrid() {
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.VerifiedUser,
                 iconTint = Secondary,
-                value = "$approvedClaims",
+                value = "${stats.activePolicies}",
                 label = "Active Policies",
                 badge = "GWP",
                 badgeColor = Color(0xFFE6EFF8),
@@ -317,9 +347,9 @@ private fun OperationalSummaryGrid() {
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Assignment,
                 iconTint = Secondary,
-                value = "$totalClaims",
+                value = "${stats.totalClaims}",
                 label = "Total Claims",
-                badge = "+${mockClaims.count { it.status == "Under Review" }} today",
+                badge = "+${stats.underReviewToday} today",
                 badgeColor = Color(0xFFCFE5FF),
                 badgeTextColor = MaterialTheme.colorScheme.primary
             )
@@ -327,7 +357,7 @@ private fun OperationalSummaryGrid() {
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Policy,
                 iconTint = RiskHighBase,
-                value = "$flaggedClaims Cases",
+                value = "${stats.underInvestigationCases} Cases",
                 label = "Under Investigation",
                 badge = "Action req.",
                 badgeColor = RiskHighContainer,
@@ -468,14 +498,14 @@ private fun QuickChip(icon: ImageVector, label: String) {
 // ─── Risk Distribution Card ─────────────────────────────────────────────────
 
 @Composable
-private fun RiskDistributionCard() {
-    val highCount = mockClaims.count { it.fraudRiskScore >= 70 }
-    val mediumCount = mockClaims.count { it.fraudRiskScore in 40..69 }
-    val lowCount = mockClaims.count { it.fraudRiskScore < 40 }
-    val total = mockClaims.size.toFloat()
-    val highPct = if (total > 0) highCount / total else 0f
-    val medPct = if (total > 0) mediumCount / total else 0f
-    val lowPct = if (total > 0) lowCount / total else 0f
+private fun RiskDistributionCard(stats: DashboardStats) {
+    val highCount = stats.highRiskCount
+    val mediumCount = stats.mediumRiskCount
+    val lowCount = stats.lowRiskCount
+    val total = stats.totalClaims.toFloat()
+    val highPct = if (total > 0) stats.highRiskPercent / 100f else 0f
+    val medPct = if (total > 0) stats.mediumRiskPercent / 100f else 0f
+    val lowPct = if (total > 0) stats.lowRiskPercent / 100f else 0f
 
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
@@ -497,7 +527,7 @@ private fun RiskDistributionCard() {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "${mockClaims.size} Audited",
+                    text = "${stats.totalClaims} Audited",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -758,7 +788,7 @@ private fun LegendDot(color: Color, label: String) {
 // ─── Suspicious Claims Section ──────────────────────────────────────────────
 
 @Composable
-private fun SuspiciousClaimsHeader() {
+private fun SuspiciousClaimsHeader(count: Int) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -777,7 +807,7 @@ private fun SuspiciousClaimsHeader() {
             )
         }
         Text(
-            text = "View all (${mockClaims.count { it.fraudRiskScore >= 40 }}) >",
+            text = "View all ($count) >",
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
             color = Secondary
         )

@@ -1,0 +1,10 @@
+{
+  "name": "vigilance-backend",
+  "version": "1.0.0",
+  "description": "Ultra-lightweight zero-dependency backend for Vigilance Insurtech ML Risk System",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

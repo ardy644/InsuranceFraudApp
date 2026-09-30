@@ -31,7 +31,16 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -43,7 +52,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.insurancefraudapp.network.VigilanceApiClient
 import com.example.insurancefraudapp.ui.theme.InsuranceFraudAppTheme
+import kotlinx.coroutines.launch
 
 /**
  * Deep-dive screen for a single claim, showing full details,
@@ -56,7 +67,27 @@ fun ClaimDetailsScreen(
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val claim = mockClaims.find { it.id == claimId }
+    var claim by remember { mutableStateOf(mockClaims.find { it.id == claimId }) }
+    var isUpdating by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(claimId) {
+        val remote = VigilanceApiClient.fetchClaimById(claimId)
+        if (remote != null) {
+            claim = remote
+        }
+    }
+
+    val updateStatus: (String) -> Unit = { newStatus ->
+        scope.launch {
+            isUpdating = true
+            val success = VigilanceApiClient.updateClaimStatus(claimId, newStatus)
+            if (success) {
+                claim = claim?.copy(status = newStatus)
+            }
+            isUpdating = false
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -88,6 +119,7 @@ fun ClaimDetailsScreen(
                 Text("Claim not found", style = MaterialTheme.typography.bodyLarge)
             }
         } else {
+            val currentClaim = claim!!
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -97,28 +129,92 @@ fun ClaimDetailsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Policyholder header
-                PolicyholderHeader(claim)
+                PolicyholderHeader(currentClaim)
 
                 HorizontalDivider()
 
                 // Claim info
-                ClaimInfoSection(claim)
+                ClaimInfoSection(currentClaim)
 
                 HorizontalDivider()
 
                 // ML Risk Score Chart (placeholder)
-                RiskScoreGauge(claim)
+                RiskScoreGauge(currentClaim)
 
                 // Risk Factor Breakdown (placeholder bar chart)
-                RiskFactorBreakdownChart(claim)
+                RiskFactorBreakdownChart(currentClaim)
 
                 // Risk factors chips
-                RiskFactorsSection(claim)
+                RiskFactorsSection(currentClaim)
 
                 // Description
-                DescriptionSection(claim)
+                DescriptionSection(currentClaim)
+
+                // Decision Action Buttons
+                DecisionActionsSection(
+                    currentStatus = currentClaim.status,
+                    isUpdating = isUpdating,
+                    onUpdateStatus = updateStatus
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DecisionActionsSection(
+    currentStatus: String,
+    isUpdating: Boolean,
+    onUpdateStatus: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Officer Decision & Triage Actions",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Current Status: $currentStatus",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { onUpdateStatus("Approved") },
+                    enabled = !isUpdating && currentStatus != "Approved",
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Approve")
+                }
+                Button(
+                    onClick = { onUpdateStatus("Under Investigation") },
+                    enabled = !isUpdating && currentStatus != "Under Investigation",
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                    modifier = Modifier.weight(1.3f)
+                ) {
+                    Text("Investigate")
+                }
+                Button(
+                    onClick = { onUpdateStatus("Flagged") },
+                    enabled = !isUpdating && currentStatus != "Flagged",
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Flag")
+                }
             }
         }
     }

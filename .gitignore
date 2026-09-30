@@ -17,4 +17,7 @@ local.properties
 .cxx
 stitch_design/
 stitch_fraudlens_ml_insurance_risk_system.zip
+backend/*.db
+node_modules/
+
 
