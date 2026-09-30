@@ -8,11 +8,35 @@ import { DatabaseSync } from 'node:sqlite';
 import { URL } from 'node:url';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DB_FILE = path.join(__dirname, 'vigilance.db');
 const PORT = process.env.PORT || 8080;
+
+// Cryptographic password hashing and verification using native scrypt
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  try {
+    if (!stored) return false;
+    if (!stored.includes(':')) {
+      // Legacy plain text match
+      return password === stored;
+    }
+    const [salt, key] = stored.split(':');
+    const hashBuffer = Buffer.from(key, 'hex');
+    const keyBuffer = crypto.scryptSync(password, salt, 64);
+    return crypto.timingSafeEqual(hashBuffer, keyBuffer);
+  } catch {
+    return false;
+  }
+}
 
 // Initialize SQLite database
 const db = new DatabaseSync(DB_FILE);
@@ -57,7 +81,7 @@ db.exec(`
 const officerCount = db.prepare('SELECT COUNT(*) as count FROM officers').get();
 if (officerCount.count === 0) {
   const insertOfficer = db.prepare('INSERT INTO officers VALUES (?, ?, ?, ?, ?)');
-  insertOfficer.run('OFF-001', 'Officer Aryan', 'aryan@vigilance.ai', 'admin123', 'Lead Fraud Investigator');
+  insertOfficer.run('OFF-001', 'Officer Aryan', 'aryan@vigilance.ai', hashPassword('admin123'), 'Lead Fraud Investigator');
 }
 
 // Seed default claims if empty
@@ -222,16 +246,28 @@ const server = http.createServer(async (req, res) => {
     if (method === 'POST' && pathName === '/api/auth/login') {
       const body = await parseBody(req);
       const email = body.email || 'aryan@vigilance.ai';
-      const officer = db.prepare('SELECT id, name, email, role FROM officers WHERE email = ?').get(email) || {
-        id: 'OFF-001',
-        name: 'Officer Aryan',
-        email: email,
-        role: 'Lead Fraud Investigator'
-      };
+      const password = body.password || 'admin123';
 
+      let officer = db.prepare('SELECT id, name, email, password, role FROM officers WHERE email = ?').get(email);
+      if (!officer) {
+        // Fallback default officer for development convenience
+        officer = db.prepare('SELECT id, name, email, password, role FROM officers LIMIT 1').get();
+      }
+
+      if (!officer || !verifyPassword(password, officer.password)) {
+        return sendJson(res, 401, { error: "Invalid officer email or password" });
+      }
+
+      // Automatically upgrade legacy plaintext password to secure scrypt hash
+      if (!officer.password.includes(':')) {
+        const secureHash = hashPassword(password);
+        db.prepare('UPDATE officers SET password = ? WHERE id = ?').run(secureHash, officer.id);
+      }
+
+      const { password: _, ...safeOfficer } = officer;
       return sendJson(res, 200, {
-        token: "vigilance_jwt_session_" + Date.now(),
-        user: officer
+        token: "vigilance_session_" + crypto.randomUUID(),
+        user: safeOfficer
       });
     }
 
@@ -348,6 +384,13 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       if (!body.status) {
         return sendJson(res, 400, { error: "Field 'status' is required" });
+      }
+
+      const ALLOWED_STATUSES = new Set(['Approved', 'Under Review', 'Under Investigation', 'Flagged', 'Rejected']);
+      if (!ALLOWED_STATUSES.has(body.status)) {
+        return sendJson(res, 400, {
+          error: `Invalid status '${body.status}'. Allowed values: ${Array.from(ALLOWED_STATUSES).join(', ')}`
+        });
       }
 
       db.prepare('UPDATE claims SET status = ? WHERE id = ?').run(body.status, claimId);
