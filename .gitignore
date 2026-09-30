@@ -15,4 +15,6 @@ local.properties
 /captures
 .externalNativeBuild
 .cxx
+stitch_design/
+stitch_fraudlens_ml_insurance_risk_system.zip
 
