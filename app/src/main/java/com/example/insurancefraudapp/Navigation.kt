@@ -14,6 +14,9 @@ import androidx.navigation.navArgument
 sealed class Screen(val route: String) {
     data object Login : Screen("login")
     data object Dashboard : Screen("dashboard")
+    data object ClaimsList : Screen("claims_list")
+    data object CustomersList : Screen("customers_list")
+    data object Analytics : Screen("analytics")
     data object ClaimDetails : Screen("claim_details/{claimId}") {
         fun createRoute(claimId: String) = "claim_details/$claimId"
     }
@@ -53,6 +56,18 @@ fun InsuranceFraudNavHost(
                     navController.navigate(Screen.Settings.route)
                 }
             )
+        }
+
+        composable(Screen.ClaimsList.route) {
+            ClaimsListScreen()
+        }
+
+        composable(Screen.CustomersList.route) {
+            CustomersListScreen()
+        }
+
+        composable(Screen.Analytics.route) {
+            AnalyticsScreen()
         }
 
         composable(
