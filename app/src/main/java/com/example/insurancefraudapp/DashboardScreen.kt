@@ -1,4 +1,9 @@
 package com.example.insurancefraudapp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -112,12 +117,15 @@ fun DashboardScreen(
         )
     }
 
+    var isVisible by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         val remoteClaims = VigilanceApiClient.fetchClaims(suspiciousOnly = true)
         if (remoteClaims.isNotEmpty()) {
             suspiciousClaims = remoteClaims
         }
         stats = VigilanceApiClient.fetchDashboardStats()
+        isVisible = true
     }
 
     LazyColumn(
@@ -134,36 +142,90 @@ fun DashboardScreen(
         }
 
         // Greeting + ML Status
-        item { GreetingSection() }
+        item {
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(500)) + slideInVertically(initialOffsetY = { 50 })
+            ) {
+                GreetingSection()
+            }
+        }
 
         // 2x2 Stat Grid
-        item { OperationalSummaryGrid(stats) }
+        item {
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(500, delayMillis = 100)) + slideInVertically(initialOffsetY = { 50 })
+            ) {
+                OperationalSummaryGrid(stats)
+            }
+        }
 
         // Quick Action Chips
-        item { QuickActionRow() }
+        item {
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(500, delayMillis = 150)) + slideInVertically(initialOffsetY = { 50 })
+            ) {
+                QuickActionRow()
+            }
+        }
 
         // Risk Distribution Card
-        item { RiskDistributionCard(stats) }
+        item {
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(500, delayMillis = 200)) + slideInVertically(initialOffsetY = { 50 })
+            ) {
+                RiskDistributionCard(stats)
+            }
+        }
 
         // Claims & Anomaly Trend
-        item { ClaimsTrendCard() }
+        item {
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(500, delayMillis = 250)) + slideInVertically(initialOffsetY = { 50 })
+            ) {
+                ClaimsTrendCard()
+            }
+        }
 
         // Suspicious Claims Header
-        item { SuspiciousClaimsHeader(suspiciousClaims.size) }
+        item {
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(500, delayMillis = 300))
+            ) {
+                SuspiciousClaimsHeader(suspiciousClaims.size)
+            }
+        }
 
         // Claim cards from backend/fallback data (only high/medium risk)
         items(suspiciousClaims, key = { it.id }) { claim ->
-            SuspiciousClaimCard(
-                claim = claim,
-                onClick = { onClaimClick(claim.id) }
-            )
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(500, delayMillis = 400)) + slideInVertically(initialOffsetY = { 50 })
+            ) {
+                SuspiciousClaimCard(
+                    claim = claim,
+                    onClick = { onClaimClick(claim.id) }
+                )
+            }
         }
 
         // Statutory Disclaimer
-        item { StatutoryDisclaimer() }
-
-        // Bottom spacing for nav bar
-        item { Spacer(modifier = Modifier.height(16.dp)) }
+        item {
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(500, delayMillis = 500))
+            ) {
+                Column {
+                    StatutoryDisclaimer()
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        }
     }
 }
 

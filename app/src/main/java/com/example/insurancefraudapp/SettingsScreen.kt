@@ -155,7 +155,7 @@ private fun PreferencesSection() {
     var pushNotifications by remember { mutableStateOf(true) }
     var highRiskAlerts by remember { mutableStateOf(true) }
     var biometricAuth by remember { mutableStateOf(false) }
-    var darkMode by remember { mutableStateOf(false) }
+    val darkThemeState = LocalThemeState.current
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
@@ -185,8 +185,8 @@ private fun PreferencesSection() {
         SettingsToggle(
             label = "Dark Mode",
             description = "Switch to dark theme",
-            checked = darkMode,
-            onCheckedChange = { darkMode = it }
+            checked = darkThemeState.value,
+            onCheckedChange = { darkThemeState.value = it }
         )
     }
 }
