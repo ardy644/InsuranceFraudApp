@@ -9,6 +9,8 @@ import { URL } from 'node:url';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import brain from 'brain.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -128,55 +130,66 @@ if (customerCount.count === 0) {
   }
 }
 
-// Automated ML Fraud Risk Heuristic Engine
+// Initialize and load Brain.js Neural Network
+const net = new brain.NeuralNetwork();
+const modelPath = path.join(__dirname, 'model.json');
+if (fs.existsSync(modelPath)) {
+  const modelData = JSON.parse(fs.readFileSync(modelPath, 'utf8'));
+  net.fromJSON(modelData);
+  console.log("✅ Brain.js ML Model loaded successfully.");
+} else {
+  console.warn("⚠️ Brain.js model not found! Please run 'node train.js' first. Using random predictions as fallback.");
+}
+
+// Automated ML Fraud Risk Engine (using brain.js)
 function evaluateFraudRisk(claimData) {
-  let score = 10;
   const factors = [];
   const text = ((claimData.description || '') + ' ' + (claimData.claimType || '')).toLowerCase();
   const amount = Number(claimData.claimAmount) || 0;
 
-  // Amount triggers
-  if (amount >= 2000000) {
-    score += 40;
-    factors.push("Extreme claim amount (>₹20L)");
-  } else if (amount >= 500000) {
-    score += 25;
-    factors.push("High claim amount (>₹5L)");
+  // Feature extraction
+  const lateNight = (text.includes("midnight") || text.includes("2 am") || text.includes("night")) ? 1 : 0;
+  const recentPolicy = (text.includes("inception") || text.includes("48 hours") || text.includes("recent policy") || text.includes("30 days")) ? 1 : 0;
+  const noFir = (text.includes("no fir") || text.includes("without fir")) ? 1 : 0;
+  const noCctv = (text.includes("no cctv") || text.includes("cctv unavailable")) ? 1 : 0;
+  const inconsistent = (text.includes("inconsistent") || text.includes("disputed") || text.includes("discrepancy")) ? 1 : 0;
+  const recurrent = (text.includes("third claim") || text.includes("multiple claim")) ? 1 : 0;
+
+  // Normalize amount (Assuming max ~30L for normalization like in training)
+  const normalizedAmount = Math.min(amount / 3000000, 1.0);
+
+  let score = 10;
+
+  if (fs.existsSync(modelPath)) {
+    // Run real neural network prediction
+    const inputFeatures = {
+      amount: normalizedAmount,
+      lateNight,
+      recentPolicy,
+      noFir,
+      noCctv,
+      inconsistent,
+      recurrent
+    };
+
+    const output = net.run(inputFeatures);
+    score = Math.round(output.risk * 100);
+  } else {
+    // Fallback if model doesn't exist
+    score = Math.floor(Math.random() * 80) + 10;
   }
 
-  // FIR / CCTV documentary absence
-  if (text.includes("no fir") || text.includes("without fir")) {
-    score += 25;
-    factors.push("No police FIR filed");
-  }
-  if (text.includes("no cctv") || text.includes("cctv unavailable")) {
-    score += 20;
-    factors.push("No surveillance footage");
-  }
+  // Populate UI Risk Factors explanation
+  if (amount >= 2000000) factors.push("Extreme claim amount (>₹20L)");
+  else if (amount >= 500000) factors.push("High claim amount (>₹5L)");
 
-  // Timing triggers
-  if (text.includes("midnight") || text.includes("2 am") || text.includes("night")) {
-    score += 15;
-    factors.push("Late night incident window");
-  }
-  if (text.includes("inception") || text.includes("48 hours") || text.includes("recent policy") || text.includes("30 days")) {
-    score += 35;
-    factors.push("Recent policy purchase / alteration (<90 days)");
-  }
-
-  // Discrepancy triggers
-  if (text.includes("inconsistent") || text.includes("disputed") || text.includes("discrepancy")) {
-    score += 20;
-    factors.push("Inconsistent statements / timeline dispute");
-  }
-  if (text.includes("third claim") || text.includes("multiple claim")) {
-    score += 25;
-    factors.push("Recurrent claims history in 12 months");
-  }
-  if (text.includes("non-family") || text.includes("beneficiary")) {
-    score += 20;
-    factors.push("Non-family beneficiary anomaly");
-  }
+  if (noFir) factors.push("No police FIR filed");
+  if (noCctv) factors.push("No surveillance footage");
+  if (lateNight) factors.push("Late night incident window");
+  if (recentPolicy) factors.push("Recent policy purchase / alteration (<90 days)");
+  if (inconsistent) factors.push("Inconsistent statements / timeline dispute");
+  if (recurrent) factors.push("Recurrent claims history in 12 months");
+  if (text.includes("non-family") || text.includes("beneficiary")) factors.push("Non-family beneficiary anomaly");
 
   score = Math.min(Math.max(score, 5), 98);
   if (factors.length === 0) {
